@@ -43,6 +43,7 @@ class LLMService:
         self._key_index = 0
         self._active_model: str = MODEL_PREFERENCE[0]
         self._init_client()
+        self._init_groq_client()
 
     def _init_client(self):
         if not self.api_keys:
@@ -53,6 +54,17 @@ class LLMService:
             api_key=current_key,
             http_options=types.HttpOptions(timeout=35000),  # 35s timeout to prevent endless hanging
         )
+
+    def _init_groq_client(self):
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=groq_key)
+            except Exception:
+                self.groq_client = None
+        else:
+            self.groq_client = None
 
     def _rotate_key(self):
         if len(self.api_keys) > 1:
@@ -98,33 +110,68 @@ class LLMService:
 
         raise last_error
 
-        raise last_error
+    def _analyze_unified_groq(
+        self, jd_text: str, resume_text: str
+    ) -> tuple[RoleAnalysis, CandidateProfile, JobFitAnalysis]:
+        if not self.groq_client:
+            raise ValueError("GROQ_API_KEY not configured.")
+
+        prompt = (
+            f"You are an elite Technical Hiring Principal and Executive Evaluator.\n"
+            f"Analyze the target Job Description and Candidate Resume, and output valid JSON matching the schema.\n\n"
+            f"=== TARGET JOB DESCRIPTION ===\n{jd_text}\n\n"
+            f"=== CANDIDATE RESUME ===\n{resume_text}\n\n"
+            f"Output JSON with keys: 'role_analysis', 'candidate_profile', 'job_fit'.\n"
+            f"role_analysis keys: role_title, key_responsibilities (list), required_skills (list), preferred_skills (list), technical_competencies (list), behavioural_competencies (list), experience_expectations (str), important_keywords (list), important_concepts (list), key_qualifications (list).\n"
+            f"candidate_profile keys: candidate_skills (list), relevant_experience (list), relevant_projects (list), relevant_achievements (list).\n"
+            f"job_fit keys: fit_score (int 0-100), strong_matches (list), partial_matches (list), missing_or_weak (list), resume_claims_to_probe (list), preparation_areas (list), summary (str).\n"
+        )
+        res = self.groq_client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[
+                {"role": "system", "content": "You are a professional technical hiring evaluator. You always output valid, raw JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        data = json.loads(res.choices[0].message.content)
+        parsed = FullAnalysisResponse.model_validate(data)
+        return parsed.role_analysis, parsed.candidate_profile, parsed.job_fit
 
     def analyze_unified(
         self, jd_text: str, resume_text: str
     ) -> tuple[RoleAnalysis, CandidateProfile, JobFitAnalysis]:
         """
-        Unified single-call extraction that decomposes role and calculates candidate fit
-        simultaneously. Reduces latency and API roundtrips by 50%.
+        Unified single-pass extraction that decomposes role and calculates candidate fit.
+        Runs Gemini first; if Google Gemini returns 503 high demand or 429 quota exhausted,
+        it automatically fails over to Groq in under 5 seconds.
         """
-        prompt = (
-            f"You are an elite Technical Hiring Principal and Executive Evaluator.\n"
-            f"Perform a comprehensive analysis of the target Job Description and Candidate Resume.\n"
-            f"Extract all role expectations, assess candidate fit score (0-100), identify match vectors, "
-            f"detect suspicious claims to probe, and output the result adhering to the FullAnalysisResponse schema.\n\n"
-            f"=== TARGET JOB DESCRIPTION ===\n{jd_text}\n\n"
-            f"=== CANDIDATE RESUME ===\n{resume_text}\n"
-        )
-        response = self._generate_with_retry(
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=FullAnalysisResponse,
-                temperature=0.2,
-            ),
-        )
-        data = FullAnalysisResponse.model_validate_json(response.text)
-        return data.role_analysis, data.candidate_profile, data.job_fit
+        # Try Gemini first
+        try:
+            prompt = (
+                f"You are an elite Technical Hiring Principal and Executive Evaluator.\n"
+                f"Perform a comprehensive analysis of the target Job Description and Candidate Resume.\n"
+                f"Extract all role expectations, assess candidate fit score (0-100), identify match vectors, "
+                f"detect suspicious claims to probe, and output the result adhering to the FullAnalysisResponse schema.\n\n"
+                f"=== TARGET JOB DESCRIPTION ===\n{jd_text}\n\n"
+                f"=== CANDIDATE RESUME ===\n{resume_text}\n"
+            )
+            response = self._generate_with_retry(
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=FullAnalysisResponse,
+                    temperature=0.2,
+                ),
+            )
+            data = FullAnalysisResponse.model_validate_json(response.text)
+            return data.role_analysis, data.candidate_profile, data.job_fit
+        except Exception as gemini_err:
+            if self.groq_client:
+                print(f"[LLM] Gemini request failed ({gemini_err}); failing over to Groq...")
+                return self._analyze_unified_groq(jd_text, resume_text)
+            raise gemini_err
 
     def analyze_role(self, jd_text: str) -> RoleAnalysis:
         response = self._generate_with_retry(

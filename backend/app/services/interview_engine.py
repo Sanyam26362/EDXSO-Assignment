@@ -19,6 +19,7 @@ class InterviewEngine:
         self._key_index = 0
         self._active_model = MODEL_PREFERENCE[0]
         self._init_client()
+        self._init_groq_client()
 
     def _init_client(self):
         if not self.api_keys:
@@ -30,39 +31,72 @@ class InterviewEngine:
             http_options=types.HttpOptions(timeout=35000),
         )
 
+    def _init_groq_client(self):
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=groq_key)
+            except Exception:
+                self.groq_client = None
+        else:
+            self.groq_client = None
+
     def _rotate_key(self):
         if len(self.api_keys) > 1:
             self._key_index = (self._key_index + 1) % len(self.api_keys)
             self._init_client()
 
     def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
-        """Retry on transient errors with model fallback and automatic key rotation."""
-        if not self.api_keys:
-            raise ValueError("GEMINI_API_KEY is not configured.")
+        """Retry on transient errors with model fallback, key rotation, and Groq backup."""
+        if not self.api_keys and not self.groq_client:
+            raise ValueError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
 
         models_to_try = [self._active_model] + [m for m in MODEL_PREFERENCE if m != self._active_model]
         last_error = None
 
-        max_key_attempts = max(len(self.api_keys), 1)
-        for _ in range(max_key_attempts):
-            for model in models_to_try:
-                try:
-                    response = self.client.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=config,
-                    )
-                    self._active_model = model
-                    return response
-                except Exception as exc:
-                    last_error = exc
-                    msg = str(exc)
-                    if any(x in msg for x in ["503", "UNAVAILABLE", "404", "NOT_FOUND"]):
+        if self.api_keys:
+            max_key_attempts = max(len(self.api_keys), 1)
+            for _ in range(max_key_attempts):
+                for model in models_to_try:
+                    try:
+                        response = self.client.models.generate_content(
+                            model=model,
+                            contents=contents,
+                            config=config,
+                        )
+                        self._active_model = model
+                        return response
+                    except Exception as exc:
+                        last_error = exc
+                        msg = str(exc)
+                        if any(x in msg for x in ["503", "UNAVAILABLE", "404", "NOT_FOUND"]):
+                            continue
+                        if any(x in msg for x in ["429", "RESOURCE_EXHAUSTED", "quota"]):
+                            break
                         continue
-                    if any(x in msg for x in ["429", "RESOURCE_EXHAUSTED", "quota"]):
-                        break
-                    continue
-            self._rotate_key()
+                self._rotate_key()
+
+        # If Gemini exhausted all attempts or not configured, fall back to Groq
+        if self.groq_client:
+            try:
+                print("[InterviewEngine] Falling back to Groq...")
+                system_inst = getattr(config, "system_instruction", "") if config else ""
+                res = self.groq_client.chat.completions.create(
+                    model="qwen/qwen3.8-27b",
+                    messages=[
+                        {"role": "system", "content": system_inst or "You are an expert AI Technical Interviewer. Always output valid JSON."},
+                        {"role": "user", "content": contents if isinstance(contents, str) else str(contents)}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.3,
+                )
+                class GroqResponseWrapper:
+                    def __init__(self, text_content):
+                        self.text = text_content
+                return GroqResponseWrapper(res.choices[0].message.content)
+            except Exception as groq_exc:
+                last_error = groq_exc
 
         raise last_error
 
