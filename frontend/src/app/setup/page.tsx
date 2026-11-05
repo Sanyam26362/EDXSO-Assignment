@@ -13,7 +13,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { uploadAndAnalyze } from "@/lib/api";
+import { uploadAndAnalyze, linkSessionToUser } from "@/lib/api";
 import { SAMPLE_JOB_DESCRIPTION, SAMPLE_RESUME } from "@/lib/sampleData";
 import {
   Upload,
@@ -158,15 +158,7 @@ export default function DocumentIngestionPage() {
       // If user is authenticated, link session to user in backend
       if (isSignedIn && user?.id) {
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
-          await fetch(`${apiUrl}/auth/link-session`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              session_id: session.session_id,
-              clerk_id: user.id,
-            }),
-          });
+          await linkSessionToUser(session.session_id, user.id);
         } catch (linkErr) {
           console.warn("Failed to link session with user:", linkErr);
         }

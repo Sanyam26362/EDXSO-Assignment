@@ -50,13 +50,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include router with /api/v1 prefix and also at root / so both work seamlessly
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IMPROVEMENT (IMP-001): Health check validates active database connectivity
 # ─────────────────────────────────────────────────────────────────────────────
 @app.get("/health")
+@app.get("/api/v1/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
     db_status = "connected"
     try:

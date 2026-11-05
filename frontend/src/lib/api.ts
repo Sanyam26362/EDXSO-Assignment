@@ -7,9 +7,18 @@ import {
   TranscriptionResponse,
 } from "@/types/interview";
 
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1"
-).replace(/\/+$/, "");
+function normalizeApiUrl(rawUrl?: string): string {
+  const url = (rawUrl || "http://127.0.0.1:8000/api/v1").trim().replace(/\/+$/, "");
+  if (url.endsWith("/api/v1")) {
+    return url;
+  }
+  if (url.endsWith("/api")) {
+    return `${url}/v1`;
+  }
+  return `${url}/api/v1`;
+}
+
+export const API_BASE_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL);
 
 export class ApiError extends Error {
   public status: number;
@@ -221,6 +230,50 @@ export async function getReport(sessionId: string): Promise<EvaluationReport> {
   return handleResponse<EvaluationReport>(res);
 }
 
+/**
+ * 10. Synchronize Clerk User Profile to Backend Database
+ * Endpoint: POST /auth/sync
+ */
+export async function syncClerkUser(userPayload: {
+  clerk_id: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  image_url: string | null;
+}): Promise<{ status: string; user_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/auth/sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(userPayload),
+  });
+  return handleResponse<{ status: string; user_id: string }>(res);
+}
+
+/**
+ * 11. Link Interview Session to Clerk User
+ * Endpoint: POST /auth/link-session
+ */
+export async function linkSessionToUser(
+  sessionId: string,
+  clerkId: string
+): Promise<{ status: string; session_id: string; user_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/auth/link-session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      clerk_id: clerkId,
+    }),
+  });
+  return handleResponse<{ status: string; session_id: string; user_id: string }>(res);
+}
+
 // Unified API Client Object
 export const api = {
   uploadAndAnalyze,
@@ -232,6 +285,8 @@ export const api = {
   transcribeAudio,
   generateReport,
   getReport,
+  syncClerkUser,
+  linkSessionToUser,
 };
 
 export default api;
