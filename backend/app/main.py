@@ -1,0 +1,72 @@
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.api import api_router
+from app.core.database import engine, Base, get_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create DB tables automatically on startup
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+
+
+app = FastAPI(
+    title="Interview Accelerator API",
+    version="1.0.0",
+    description="Adaptive AI-powered interview simulator and fit engine",
+    lifespan=lifespan,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORS CONFIGURATION (Production & Local Development)
+# Supports local Next.js dev server, Vercel preview/production domains,
+# and custom FRONTEND_URL environment variable.
+# ─────────────────────────────────────────────────────────────────────────────
+cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+frontend_env_url = os.getenv("FRONTEND_URL")
+if frontend_env_url:
+    cors_origins.append(frontend_env_url.rstrip("/"))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|.*\.vercel\.app|.*\.onrender\.com)(:\d+)?$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router, prefix="/api/v1")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IMPROVEMENT (IMP-001): Health check validates active database connectivity
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    db_status = "connected"
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        db_status = f"unreachable: {str(exc)}"
+
+    is_healthy = db_status == "connected"
+    return {
+        "status": "ok" if is_healthy else "degraded",
+        "service": "Interview Accelerator",
+        "database": db_status,
+    }
