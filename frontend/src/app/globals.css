@@ -1,0 +1,268 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* =====================================================================
+     Unified Platform Console Theme (Matches Inkloom AI Brand)
+     ===================================================================== */
+  --color-surface: #ffffff;
+  --color-surface-dim: #f5f0e7;
+  --color-surface-bright: #ffffff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #ffffff;
+  --color-surface-container: #f5f0e7;
+  --color-surface-container-high: #eae5dc;
+  --color-surface-container-highest: #dcd7ce;
+  
+  --color-on-surface: #101010;
+  --color-on-surface-variant: #374151;
+  --color-outline: #101010;
+  --color-outline-variant: #262626;
+  
+  --color-primary: #ffdb1f;
+  --color-primary-container: #ffdb1f;
+  --color-on-primary: #101010;
+  --color-on-primary-container: #101010;
+  
+  --color-secondary: #00A36C;
+  --color-secondary-container: #f0faf3;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #00A36C;
+  
+  --color-error: #ff4b3e;
+  --color-error-container: #fef2f2;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #991b1b;
+
+  --color-warning: #ff6b2c;
+  --color-warning-container: #fffbeb;
+  --color-on-warning: #ffffff;
+  --color-on-warning-container: #b45309;
+
+  --color-background: #f5f0e7;
+  --color-text-primary: #101010;
+  --color-text-muted: #4b5563;
+  --color-border: #101010;
+
+  /* Inkloom AI Neo-Brutalism Palette Tokens */
+  --color-ink: #101010;
+  --color-paper: #f5f0e7;
+  --color-brutal-yellow: #ffdb1f;
+  --color-brutal-pink: #ff72b6;
+  --color-brutal-orange: #ff6b2c;
+  --color-brutal-green: #b9f4a8;
+  --color-brutal-blue: #a8d8ff;
+  --color-brutal-red: #ff4b3e;
+  --color-brutal-white: #ffffff;
+
+  /* Spacing Tokens */
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 0.75rem;
+  --spacing-space-lg: 1.25rem;
+  --spacing-space-xl: 2rem;
+
+  /* Font Families */
+  --font-archivo: 'Archivo Black', Arial, sans-serif;
+  --font-roboto-mono: 'Roboto Mono', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: 'Roboto Mono', "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --font-heading: 'Archivo Black', Arial, sans-serif;
+}
+
+@layer base {
+  :root {
+    --color-surface: #ffffff;
+    --color-surface-dim: #f5f0e7;
+    --color-surface-bright: #ffffff;
+    --color-surface-container-lowest: #ffffff;
+    --color-surface-container-low: #ffffff;
+    --color-surface-container: #f5f0e7;
+    --color-surface-container-high: #eae5dc;
+    --color-surface-container-highest: #dcd7ce;
+    
+    --color-on-surface: #101010;
+    --color-on-surface-variant: #374151;
+    --color-outline: #101010;
+    --color-outline-variant: #262626;
+    
+    --color-primary: #ffdb1f;
+    --color-background: #f5f0e7;
+    --color-text-primary: #101010;
+    --color-text-muted: #4b5563;
+    --color-border: #101010;
+
+    --ink: #101010;
+    --paper: #f5f0e7;
+    --yellow: #ffdb1f;
+    --pink: #ff72b6;
+    --orange: #ff6b2c;
+    --green: #b9f4a8;
+    --blue: #a8d8ff;
+    --red: #ff4b3e;
+    --white: #ffffff;
+    --border-color: #101010;
+  }
+
+  /* Dark mode overrides if dark class is explicitly toggled */
+  html.dark {
+    --color-surface: #121316;
+    --color-surface-dim: #0d0e11;
+    --color-surface-bright: #38393c;
+    --color-surface-container-lowest: #0d0e11;
+    --color-surface-container-low: #1b1b1f;
+    --color-surface-container: #1f1f23;
+    --color-surface-container-high: #292a2d;
+    --color-surface-container-highest: #343538;
+
+    --color-on-surface: #e3e2e6;
+    --color-on-surface-variant: #ccc3d8;
+    --color-outline: #958da1;
+    --color-outline-variant: #3b3c44;
+
+    --color-primary: #7c3aed;
+    --color-primary-container: #7c3aed;
+    --color-on-primary: #ffffff;
+    --color-on-primary-container: #ede0ff;
+    --color-primary-fixed: #eaddff;
+    --color-primary-fixed-dim: #d2bbff;
+
+    --color-background: #121316;
+    --color-text-primary: #e3e2e6;
+    --color-text-muted: #958da1;
+    --color-border: #383a45;
+
+    --ink: #101010;
+    --paper: #121316;
+    --surface: #1c1d22;
+    --yellow: #ffdb1f;
+    --pink: #ff72b6;
+    --orange: #ff6b2c;
+    --green: #b9f4a8;
+    --blue: #a8d8ff;
+    --red: #ff4b3e;
+    --white: #fffdf7;
+    --border-color: #383a45;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #f5f0e7;
+    color: #101010;
+    font-family: var(--font-roboto-mono), "Roboto Mono", monospace;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark body {
+    background-color: #121316;
+    color: #e3e2e6;
+  }
+}
+
+/* =====================================================================
+   Typography Utilities
+   ===================================================================== */
+h1, h2, h3, h4, h5, h6,
+.font-archivo,
+.font-heading {
+  font-family: 'Archivo Black', Arial, sans-serif;
+}
+
+.font-mono,
+code,
+kbd,
+samp {
+  font-family: 'Roboto Mono', monospace;
+}
+
+/* Tabular Numerals Utility */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  -webkit-font-feature-settings: "tnum";
+  font-feature-settings: "tnum";
+}
+
+/* Material Symbols Icon Helper */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* =====================================================================
+   Neo-Brutalist Reusable Foundations
+   ===================================================================== */
+.brutal-card {
+  border: 3px solid #101010;
+  box-shadow: 4px 4px 0px #000000;
+  background: #ffffff;
+  color: #101010;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.brutal-card-lg {
+  border: 4px solid #101010;
+  box-shadow: 6px 6px 0px #000000;
+  background: #ffffff;
+  color: #101010;
+}
+
+.brutal-window {
+  border: 4px solid #101010;
+  background: #f5f0e7;
+  box-shadow: 8px 8px 0px #000000;
+}
+
+.brutal-window-bar {
+  height: 42px;
+  background: #101010;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.brutal-badge {
+  border: 2px solid #000000;
+  font-family: 'Roboto Mono', monospace;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  box-shadow: 2px 2px 0px #000000;
+}
