@@ -42,8 +42,7 @@ async def analyze_match_text(
         raise HTTPException(status_code=400, detail="Both Job Description and Resume text are required.")
 
     try:
-        role_data = llm_service.analyze_role(payload.job_description)
-        candidate_profile, job_fit = llm_service.analyze_candidate_fit(
+        role_data, candidate_profile, job_fit = llm_service.analyze_unified(
             payload.job_description, payload.resume_text
         )
     except Exception as exc:
@@ -106,8 +105,9 @@ async def analyze_match_files(
         )
 
     try:
-        role_data = llm_service.analyze_role(resolved_jd)
-        candidate_profile, job_fit = llm_service.analyze_candidate_fit(resolved_jd, resolved_resume)
+        role_data, candidate_profile, job_fit = llm_service.analyze_unified(
+            resolved_jd, resolved_resume
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LLM analysis failed: {str(exc)}")
 

@@ -7,28 +7,45 @@ from google.genai import types
 from app.core.prompts import INTERVIEW_QUESTION_SYSTEM_PROMPT, FINAL_EVALUATION_SYSTEM_PROMPT
 
 MODEL_PREFERENCE = [
-    "gemini-flash-lite-latest",
-    "gemini-flash-latest",
     "gemini-3.5-flash",
+    "gemini-flash-latest",
 ]
 
 
 class InterviewEngine:
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
-        self.client = genai.Client(api_key=api_key) if api_key else None
+        raw_keys = os.getenv("GEMINI_API_KEY", "")
+        self.api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+        self._key_index = 0
         self._active_model = MODEL_PREFERENCE[0]
+        self._init_client()
 
-    def _generate_with_retry(self, contents, config, retries: int = 3) -> types.GenerateContentResponse:
-        """Retry on transient errors with exponential back-off and model fallback."""
-        if not self.client:
+    def _init_client(self):
+        if not self.api_keys:
+            self.client = None
+            return
+        current_key = self.api_keys[self._key_index]
+        self.client = genai.Client(
+            api_key=current_key,
+            http_options=types.HttpOptions(timeout=35000),
+        )
+
+    def _rotate_key(self):
+        if len(self.api_keys) > 1:
+            self._key_index = (self._key_index + 1) % len(self.api_keys)
+            self._init_client()
+
+    def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
+        """Retry on transient errors with model fallback and automatic key rotation."""
+        if not self.api_keys:
             raise ValueError("GEMINI_API_KEY is not configured.")
 
         models_to_try = [self._active_model] + [m for m in MODEL_PREFERENCE if m != self._active_model]
         last_error = None
 
-        for model in models_to_try:
-            for attempt in range(retries):
+        max_key_attempts = max(len(self.api_keys), 1)
+        for _ in range(max_key_attempts):
+            for model in models_to_try:
                 try:
                     response = self.client.models.generate_content(
                         model=model,
@@ -40,10 +57,12 @@ class InterviewEngine:
                 except Exception as exc:
                     last_error = exc
                     msg = str(exc)
-                    if any(x in msg for x in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "404"]) and attempt < retries - 1:
-                        time.sleep(1.5 ** attempt)
+                    if any(x in msg for x in ["503", "UNAVAILABLE", "404", "NOT_FOUND"]):
                         continue
-                    break
+                    if any(x in msg for x in ["429", "RESOURCE_EXHAUSTED", "quota"]):
+                        break
+                    continue
+            self._rotate_key()
 
         raise last_error
 
