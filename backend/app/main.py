@@ -1,7 +1,8 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,25 @@ async def lifespan(app: FastAPI):
     # Create DB tables automatically on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Auto-migrate columns if missing on existing databases (Neon / Postgres / SQLite)
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text("""
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name='interview_sessions' AND column_name='user_id'
+                    ) THEN 
+                        ALTER TABLE interview_sessions ADD COLUMN user_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL;
+                        CREATE INDEX IF NOT EXISTS ix_interview_sessions_user_id ON interview_sessions (user_id);
+                    END IF; 
+                END $$;
+            """))
+        elif conn.dialect.name == "sqlite":
+            res = await conn.execute(text("PRAGMA table_info(interview_sessions);"))
+            columns = [row[1] for row in res.fetchall()]
+            if "user_id" not in columns:
+                await conn.execute(text("ALTER TABLE interview_sessions ADD COLUMN user_id VARCHAR(36);"))
     yield
     await engine.dispose()
 
@@ -24,6 +44,22 @@ app = FastAPI(
     description="Adaptive AI-powered interview simulator and fit engine",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Headers"] = "*"
+        headers["Access-Control-Allow-Methods"] = "*"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"},
+        headers=headers,
+    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORS CONFIGURATION (Production & Local Development)

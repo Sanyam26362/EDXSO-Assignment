@@ -61,9 +61,13 @@ async def analyze_match_text(
         current_level=1,
         status="ready",
     )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
+    try:
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error saving session: {str(exc)}")
 
     return {
         "session_id": session.id,
@@ -119,9 +123,13 @@ async def analyze_match_files(
         current_level=1,
         status="ready",
     )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
+    try:
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error saving session: {str(exc)}")
 
     return {
         "session_id": session.id,

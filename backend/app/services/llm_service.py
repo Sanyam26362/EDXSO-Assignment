@@ -14,9 +14,9 @@ load_dotenv()
 
 # Priority order for models: stable high-speed aliases first
 MODEL_PREFERENCE = [
-    "gemini-flash-lite-latest",
-    "gemini-flash-latest",
     "gemini-3.5-flash",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
 ]
 
 
@@ -57,25 +57,17 @@ class LLMService:
         last_error = None
 
         for model in models_to_try:
-            for attempt in range(retries):
-                try:
-                    response = self.client.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=config,
-                    )
-                    self._active_model = model
-                    return response
-                except Exception as exc:
-                    last_error = exc
-                    msg = str(exc)
-                    is_transient = any(
-                        x in msg for x in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND"]
-                    )
-                    if is_transient and attempt < retries - 1:
-                        time.sleep(1.5 ** attempt)
-                        continue
-                    break  # Try next model in preference list
+            try:
+                response = self.client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                )
+                self._active_model = model
+                return response
+            except Exception as exc:
+                last_error = exc
+                continue  # Try next model in preference list immediately
 
         raise last_error
 
