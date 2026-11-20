@@ -59,8 +59,8 @@ class LLMService:
         groq_key = os.getenv("GROQ_API_KEY")
         if groq_key:
             try:
-                from groq import Groq
-                self.groq_client = Groq(api_key=groq_key)
+                from groq import AsyncGroq
+                self.groq_client = AsyncGroq(api_key=groq_key)
             except Exception:
                 self.groq_client = None
         else:
@@ -75,9 +75,10 @@ class LLMService:
     def model_name(self) -> str:
         return self._active_model
 
-    def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
+    async def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
         """
         Generate content with automatic key rotation and multi-model fallback.
+        Uses async Gemini client to avoid blocking the event loop.
         """
         if not self.api_keys:
             raise ValueError("GEMINI_API_KEY is missing from environment variables.")
@@ -89,7 +90,7 @@ class LLMService:
         for _ in range(max_key_attempts):
             for model in models_to_try:
                 try:
-                    response = self.client.models.generate_content(
+                    response = await self.client.aio.models.generate_content(
                         model=model,
                         contents=contents,
                         config=config,
@@ -110,7 +111,7 @@ class LLMService:
 
         raise last_error
 
-    def _analyze_unified_groq(
+    async def _analyze_unified_groq(
         self, jd_text: str, resume_text: str
     ) -> tuple[RoleAnalysis, CandidateProfile, JobFitAnalysis]:
         if not self.groq_client:
@@ -126,7 +127,7 @@ class LLMService:
             f"candidate_profile keys: candidate_skills (list), relevant_experience (list), relevant_projects (list), relevant_achievements (list).\n"
             f"job_fit keys: fit_score (int 0-100), strong_matches (list), partial_matches (list), missing_or_weak (list), resume_claims_to_probe (list), preparation_areas (list), summary (str).\n"
         )
-        res = self.groq_client.chat.completions.create(
+        res = await self.groq_client.chat.completions.create(
             model="qwen/qwen3.8-27b",
             messages=[
                 {"role": "system", "content": "You are a professional technical hiring evaluator. You always output valid, raw JSON."},
@@ -139,7 +140,7 @@ class LLMService:
         parsed = FullAnalysisResponse.model_validate(data)
         return parsed.role_analysis, parsed.candidate_profile, parsed.job_fit
 
-    def analyze_unified(
+    async def analyze_unified(
         self, jd_text: str, resume_text: str
     ) -> tuple[RoleAnalysis, CandidateProfile, JobFitAnalysis]:
         """
@@ -157,7 +158,7 @@ class LLMService:
                 f"=== TARGET JOB DESCRIPTION ===\n{jd_text}\n\n"
                 f"=== CANDIDATE RESUME ===\n{resume_text}\n"
             )
-            response = self._generate_with_retry(
+            response = await self._generate_with_retry(
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -170,11 +171,11 @@ class LLMService:
         except Exception as gemini_err:
             if self.groq_client:
                 print(f"[LLM] Gemini request failed ({gemini_err}); failing over to Groq...")
-                return self._analyze_unified_groq(jd_text, resume_text)
+                return await self._analyze_unified_groq(jd_text, resume_text)
             raise gemini_err
 
-    def analyze_role(self, jd_text: str) -> RoleAnalysis:
-        response = self._generate_with_retry(
+    async def analyze_role(self, jd_text: str) -> RoleAnalysis:
+        response = await self._generate_with_retry(
             contents=f"Job Description:\n{jd_text}",
             config=types.GenerateContentConfig(
                 system_instruction=ROLE_ANALYSIS_SYSTEM_PROMPT,
@@ -185,9 +186,9 @@ class LLMService:
         )
         return RoleAnalysis.model_validate_json(response.text)
 
-    def analyze_candidate_fit(self, jd_text: str, resume_text: str) -> tuple[CandidateProfile, JobFitAnalysis]:
+    async def analyze_candidate_fit(self, jd_text: str, resume_text: str) -> tuple[CandidateProfile, JobFitAnalysis]:
         prompt = f"JOB DESCRIPTION:\n{jd_text}\n\nCANDIDATE RESUME:\n{resume_text}"
-        response = self._generate_with_retry(
+        response = await self._generate_with_retry(
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=CANDIDATE_FIT_SYSTEM_PROMPT,

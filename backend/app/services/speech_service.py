@@ -46,7 +46,7 @@ class SpeechService:
         for _ in range(max_key_attempts):
             for model in self.transcription_models:
                 try:
-                    response = self.client.models.generate_content(
+                    response = await self.client.aio.models.generate_content(
                         model=model,
                         contents=[
                             genai_types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),

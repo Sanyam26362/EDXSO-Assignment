@@ -80,7 +80,7 @@ async def start_interview(payload: StartInterviewRequest, db: AsyncSession = Dep
     # BUG FIX: LLM call guarded with 502 status
     # ─────────────────────────────────────────────────────────────────────────
     try:
-        first_q_data = interview_engine.generate_next_question(
+        first_q_data = await interview_engine.generate_next_question(
             role_title=session.role_title,
             jd_text=session.jd_text,
             resume_text=session.resume_text,
@@ -189,7 +189,7 @@ async def process_interview_turn(payload: SubmitAnswerRequest, db: AsyncSession 
     # BUG FIX: LLM call guarded with 502 status
     # ─────────────────────────────────────────────────────────────────────────
     try:
-        next_q = interview_engine.generate_next_question(
+        next_q = await interview_engine.generate_next_question(
             role_title=session.role_title,
             jd_text=session.jd_text,
             resume_text=session.resume_text,

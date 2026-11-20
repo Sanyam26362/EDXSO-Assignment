@@ -54,7 +54,7 @@ async def generate_report(session_id: str, db: AsyncSession = Depends(get_db)):
     # BUG FIX: LLM unguarded — 503 bubbled as 500 ISE
     # ─────────────────────────────────────────────────────────────────────────
     try:
-        report_dict = interview_engine.generate_final_report(
+        report_dict = await interview_engine.generate_final_report(
             role_title=session.role_title,
             jd_text=session.jd_text,
             resume_text=session.resume_text,

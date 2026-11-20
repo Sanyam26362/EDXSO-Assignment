@@ -35,8 +35,8 @@ class InterviewEngine:
         groq_key = os.getenv("GROQ_API_KEY")
         if groq_key:
             try:
-                from groq import Groq
-                self.groq_client = Groq(api_key=groq_key)
+                from groq import AsyncGroq
+                self.groq_client = AsyncGroq(api_key=groq_key)
             except Exception:
                 self.groq_client = None
         else:
@@ -47,8 +47,10 @@ class InterviewEngine:
             self._key_index = (self._key_index + 1) % len(self.api_keys)
             self._init_client()
 
-    def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
-        """Retry on transient errors with model fallback, key rotation, and Groq backup."""
+    async def _generate_with_retry(self, contents, config) -> types.GenerateContentResponse:
+        """Retry on transient errors with model fallback, key rotation, and Groq backup.
+        Uses async Gemini client to avoid blocking the event loop.
+        """
         if not self.api_keys and not self.groq_client:
             raise ValueError("Neither GEMINI_API_KEY nor GROQ_API_KEY is configured.")
 
@@ -60,7 +62,7 @@ class InterviewEngine:
             for _ in range(max_key_attempts):
                 for model in models_to_try:
                     try:
-                        response = self.client.models.generate_content(
+                        response = await self.client.aio.models.generate_content(
                             model=model,
                             contents=contents,
                             config=config,
@@ -82,7 +84,7 @@ class InterviewEngine:
             try:
                 print("[InterviewEngine] Falling back to Groq...")
                 system_inst = getattr(config, "system_instruction", "") if config else ""
-                res = self.groq_client.chat.completions.create(
+                res = await self.groq_client.chat.completions.create(
                     model="qwen/qwen3.8-27b",
                     messages=[
                         {"role": "system", "content": system_inst or "You are an expert AI Technical Interviewer. Always output valid JSON."},
@@ -114,7 +116,7 @@ class InterviewEngine:
                 return {"question": q_match.group(1), "focus_area": "Technical Assessment"}
             return default
 
-    def generate_next_question(
+    async def generate_next_question(
         self,
         role_title: str,
         jd_text: str,
@@ -134,7 +136,7 @@ class InterviewEngine:
 
         prompt = f"INTERVIEW CONTEXT:\n{json.dumps(context_payload, indent=2)}\n\nGenerate the next question."
 
-        response = self._generate_with_retry(
+        response = await self._generate_with_retry(
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=INTERVIEW_QUESTION_SYSTEM_PROMPT,
@@ -154,7 +156,7 @@ class InterviewEngine:
             parsed["focus_area"] = "Technical Depth"
         return parsed
 
-    def generate_final_report(
+    async def generate_final_report(
         self,
         role_title: str,
         jd_text: str,
@@ -170,7 +172,7 @@ class InterviewEngine:
 
         prompt = f"COMPLETE INTERVIEW TRANSCRIPT:\n{json.dumps(payload, indent=2)}\n\nGenerate the complete evaluation report."
 
-        response = self._generate_with_retry(
+        response = await self._generate_with_retry(
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=FINAL_EVALUATION_SYSTEM_PROMPT,
